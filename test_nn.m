@@ -1,3 +1,5 @@
+%% test neural net 
+
 % run_FP_Pipeline
 % John Bernabei, Arjun Shankar
 
@@ -18,11 +20,11 @@ load features
 
 final_feats = []
 for j = 1:9
-   final_feats = [final_feats, mMSEpred(j).data] 
+   final_feats = [final_feats, mMSEpred(j).data]; 
 end
 
 fin_feats = unique(final_feats);
-final_feats = fin_feats(1<histc(final_feats,fin_feats))
+final_feats = fin_feats(1<histc(final_feats,fin_feats));
 %load tweet_ind
 
 % train_inputs is 1019 (counties = n) x 2021 (features = p)
@@ -57,7 +59,7 @@ tweet_ind = find(tweet_var>=(mean(tweet_var)));
 tweet_data_red = X_tweet(:,tweet_ind);
 % PCA tweet data
 [COEFF, SCORE, LATENT, TSQUARED, EXPLAINED, MU] = pca(X_tweet(:,(final_feats(final_feats>21)-21)));
-X_tweet_pca = SCORE(:,1:15);
+X_tweet_pca = SCORE(:,1:10);
 [COEFF, SCORE, LATENT, TSQUARED, EXPLAINED, MU] = pca(X_demo);
 X_demo_pca = SCORE(:,1:15);
 
@@ -84,10 +86,11 @@ X_demo_pca_test = X_demo_pca(partitions ==1,:);
 X_comp_test = [X_demo_test, X_tweet_pca_test];
 Z_comp_test = zscore(X_comp_test);
 
-Z_tot_comp = normalize([X_demo, X_tweet_pca]);
+Z_tot_comp = zscore([X_demo, X_tweet_pca]);
 
 Z_comp_train2 = Z_tot_comp(partitions ~=1,:);
 Z_comp_test2 = Z_tot_comp(partitions ==1,:);
+
 
 % Z score appropriate sub-data
 Z_demo_train = zscore(X_demo_train);
@@ -101,30 +104,10 @@ Z_tweet_test = zscore(X_tweet_test);
 Y_train = train_labels(partitions ~=1,:);
 Y_test = train_labels(partitions ==1,:);
 
-%% Generative model - kmeans
-% Modeled on composite
-
-kmeans_total = kmeans([Z_demo_train;Z_demo_test],3);
-Y_est_km  = kmeans_total(partitions ~=1);
-Y_pred_km = kmeans_total(partitions ==1);
-
-%% Do lasso
-
-for j=1:9
-    [B,FitInfo] = lasso(X_train_raw(:,final_feats),Y_train(:,j),'Alpha',0.25,'MaxIter',1e4,'CV',5)%,'PredictorNames',string([1:size(X_comp_train,2)]));
-    idxLambda1SE = FitInfo.Index1SE;
-    coef = B(:,idxLambda1SE);
-    coef0 = FitInfo.Intercept(idxLambda1SE);
-    Y_est_el(:,j) = X_train_raw(:,final_feats)*coef + coef0;
-    Y_pred_el(:,j) = X_test_raw(:,final_feats)*coef + coef0;
-    %idxLambdaMinMSE = FitInfo.IndexMinMSE;
-    %mMSEpred(j).data = cellfun(@str2num,FitInfo.PredictorNames(B(:,idxLambdaMinMSE)~=0))
-end
-
 %% neural net
 
 for j = 1:9
-    net = feedforwardnet(12);
+    net = feedforwardnet(13);
     net.layers{1}.transferFcn = 'poslin';% 1st layer activation function is logistic sigmoid
     net.performFcn = 'crossentropy' ;  %specify loss function appropriate for classification
     net.performParam.regularization = 10e-2 ;  % regularization parameter
@@ -134,37 +117,5 @@ for j = 1:9
     j
 end
 
-
-%% Discriminative model - random forest
-
-for j = 1:labels
-    mdl_rf(j).data = TreeBagger(300,X_train_raw(:,final_feats),Y_train(:,j),...
-                'oobpred','On','Method','regression',...
-                'OOBVarImp','on');   
-    Y_est_rf(:,j) = predict(mdl_rf(j).data,X_train_raw(:,final_feats));
-    Y_pred_rf(:,j) = predict(mdl_rf(j).data,X_test_raw(:,final_feats));
-end
-
-
-%% Instance based model - knn
-
-for j = 1:labels
-    Y_est_kr(:,j) = k_nearest_neighbours(Z_comp_train2,Y_train(:,j),Z_comp_train2,20,'l2');
-    Y_pred_kr(:,j) = k_nearest_neighbours(Z_comp_train2,Y_train(:,j),Z_comp_test2,20,'l2');
-end
-
-%% Ensemble
-
-for j=1:labels
-   mdl_ens(j).data = TreeBagger(40,[Y_est_rf, Y_est_kr, Y_est_ne, Y_est_el],Y_train(:,j),...
-                'oobpred','On','Method','regression',...
-                'OOBVarImp','on'); 
-   Y_pred_ens(:,j) = predict(mdl_ens(j).data,[Y_pred_rf, Y_pred_kr, Y_pred_ne, Y_pred_el]);
-end
-
 %% Return error
-error_ens = error_metric(Y_pred_ens,Y_test)
-error_rf  = error_metric(Y_pred_rf,Y_test)
-error_kr  = error_metric(Y_pred_kr,Y_test)
-error_el  = error_metric(Y_pred_el,Y_test)
 error_ne  = error_metric(Y_pred_ne,Y_test)

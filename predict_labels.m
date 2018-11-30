@@ -55,6 +55,10 @@ X_tweet_pca_test = X_tweet_pca((n_train+1):end,:);
 X_comp_test = [X_demo_test, X_tweet_pca_test];
 Z_comp_test = zscore(X_comp_test);
 
+Z_tot_comp = zscore([X_demo, X_tweet_pca]);
+Z_comp_train2 = Z_tot_comp((1:n_train),:);
+Z_comp_test2 = Z_tot_comp((n_train+1):end,:);
+
 
 Y_train = Y_train_tot;
 
@@ -80,13 +84,13 @@ end
 %% neural net
 
 for j = 1:9
-    net = feedforwardnet(30);
+    net = feedforwardnet(14);
     net.layers{1}.transferFcn = 'poslin';% 1st layer activation function is logistic sigmoid
     net.performFcn = 'crossentropy' ;  %specify loss function appropriate for classification
-    net.performParam.regularization = 10e-3 ;  % regularization parameter
-    net = trainlm(net,Z_comp_train',Y_train(:,j)'); % train with backpropagation
-    Y_est_ne(:,j) = net(Z_comp_train');
-    Y_pred_ne(:,j)= net(Z_comp_test');
+    net.performParam.regularization = 10e-2 ;  % regularization parameter
+    net = trainlm(net,Z_comp_train2',Y_train(:,j)'); % train with backpropagation
+    Y_est_ne(:,j) = net(Z_comp_train2');
+    Y_pred_ne(:,j)= net(Z_comp_test2');
 end
 
 
@@ -111,8 +115,8 @@ end
 %% Instance based model - knn
 
 for j = 1:labels
-    Y_est_kr(:,j) = k_nearest_neighbours(Z_comp_train,Y_train(:,j),Z_comp_train,20,'l2');
-    Y_pred_kr(:,j) = k_nearest_neighbours(Z_comp_train,Y_train(:,j),Z_comp_test,20,'l2');
+    Y_est_kr(:,j) = k_nearest_neighbours(Z_comp_train2,Y_train(:,j),Z_comp_train2,20,'l2');
+    Y_pred_kr(:,j) = k_nearest_neighbours(Z_comp_train2,Y_train(:,j),Z_comp_test2,20,'l2');
 end
 
 %% Ensemble
@@ -121,10 +125,18 @@ for j=1:labels
    mdl_ens(j).data = TreeBagger(30,[Y_est_rf, Y_est_kr, Y_est_ne, Y_est_el],Y_train(:,j),...
                 'oobpred','On','Method','regression',...
                 'OOBVarImp','on'); 
+   Y_est_ens(:,j) = predict(mdl_ens(j).data,[Y_est_rf, Y_est_kr, Y_est_ne, Y_est_el])
    Y_pred_ens(:,j) = predict(mdl_ens(j).data,[Y_pred_rf, Y_pred_kr, Y_pred_ne, Y_pred_el]);
 end
 
 %% Return labels
+error_ens = error_metric(Y_est_ens,Y_train)
+error_rf  = error_metric(Y_est_rf,Y_train)
+error_kr  = error_metric(Y_est_kr,Y_train)
+error_el  = error_metric(Y_est_el,Y_train)
+error_ne  = error_metric(Y_est_ne,Y_train)
+
+
 pred_labels = Y_pred_ens;
 
 end
