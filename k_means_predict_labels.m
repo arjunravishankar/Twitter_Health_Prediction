@@ -5,7 +5,7 @@ function [pred_labels]=k_means_predict_labels(train_inputs,train_labels,test_inp
 pred_labels=zeros(size(test_inputs,1),p_features);
 
 %Loop through each label column to create predicted labels matrix
-[idx,C] = kmeans(vertcat(train_inputs,test_inputs),100);
+[idx,C] = kmeans(vertcat(train_inputs,test_inputs),90);
 for p=1:p_features
     cluster_labels=zeros(k,1);
     for cluster=1:k
